@@ -1,25 +1,130 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
+title: 'Reproducible Research: Peer Assessment 1'
 output: 
   html_document:
     keep_md: true
 ---
 
+This document contains the code and answers for the Reproducible Research assignment 1. 
 
 ## Loading and preprocessing the data
+```{r}
+#Read in the data files
+setwd("C:/Users/Pete/Documents/R-files/Course5")
+data = read.csv("activity.csv")
 
+library(plyr)
+library(lubridate)
+```
 
 
 ## What is mean total number of steps taken per day?
+
+1. The total number of steps each day is shown in the table below.
+
+```{r}
+daily_steps = ddply(na.exclude(data), c("date"), summarise, total_steps = sum(steps))
+daily_steps
+```
+
+2. The graph below shows a histogram of the number of steps taken per day.
+
+```{r}
+hist(daily_steps$total_steps, xlab = "No. of steps", main = "Total number of steps per day", col = "cyan")
+```
+
+3. The mean number of steps per day is:
+
+```{r}
+mean(daily_steps$total_steps)
+```
+and the median is:
+```{r}
+median(daily_steps$total_steps)
+```
 
 
 
 ## What is the average daily activity pattern?
 
+1. Below is a time series plot of the average number of steps per day, by five minute interval.
 
+```{r}
+daily_pattern = ddply(na.exclude(data), c("interval"), summarise, total_steps = sum(steps), ave_steps = mean(steps))
+plot.ts(daily_pattern$ave_steps, type = "l", xlab = "5-minute time interval",
+        ylab = "No. of steps per day", main = "Average daily activity pattern")
+```
+
+2. The 5-minute interval with the maximum number of steps is the interval commencing at:
+
+```{r}
+daily_max = which.max(daily_pattern$ave_steps)
+daily_pattern[daily_max,]
+most_active = daily_pattern[daily_max,1]
+```
+
+time `r most_active`.
 
 ## Imputing missing values
 
+```{r}
+na_data = subset(data, is.na(steps))
+```
+
+1. The total number of missing values is `r nrow(na_data)`.
+
+2. The strategy for filling missing values is to assume that they are are identical to average from the same 5-minute interval over the rest of the days (but rounded using R's round function).  This will result in an integer as the number of steps per interval.
+
+3. A new dataset as revised_data in the code below.
+
+```{r}
+data_for_missing = ddply(na.exclude(data), c("interval"), summarise, ave_steps = round(mean(steps),0))
+new_dataset = merge(data, data_for_missing, by.x = "interval", by.y = "interval")
+new_dataset = arrange(new_dataset, date, interval)
+data_adjusted = mutate(new_dataset, estimate_steps = ifelse(is.na(steps), ave_steps, steps))
+revised_data = data_adjusted[,c(5,3,1)]
+```
+
+4.The graph below shows a new histogram of the estimated number of steps taken per day.
+
+```{r}
+revised_daily_steps = ddply(revised_data, c("date"), summarise, total_steps = sum(estimate_steps))
+hist(revised_daily_steps$total_steps, xlab = "No. of steps", main = "Total number of steps per day", col = "orange")
+```
+
+The mean number of steps per day is now:
+
+```{r}
+mean(revised_daily_steps$total_steps)
+```
+and the median is now:
+```{r}
+median(revised_daily_steps$total_steps)
+```
+
+As a result of including estimated values for the missing dates, the mean has fallen slightly and the median has reduced from 10765 to 10762.  This is due to the additional days all being assumed to have the same number of steps as an average day, which was estimated as 10762 (after rounding for each interval)
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+1. The code below creates a new factor variable indicating whether a date is a weekday or weekend:
+
+```{r}
+day = wday(as.Date(data$date,'%Y-%m-%d'), label=TRUE)
+data_adj = cbind(revised_data, day)
+data_adj = mutate(data_adj, weekday_or_weekend = as.factor(ifelse(day == "Sat" | day == "Sun", "weekend", "weekday")))
+```
+
+To prove that we have a new factor variable, the strucure of the data and a sample is below, 
+```{r}
+str(data_adj)
+head(data_adj)
+```
+
+2. Below is a plot showing the average number of steps on a weekday compared to on a weekend.
+```{r}
+weekly_pattern = ddply(data_adj, c("weekday_or_weekend", "interval"), summarise, ave_steps = mean(estimate_steps))
+library(ggplot2)
+ggplot(weekly_pattern, aes(x = interval, y = ave_steps), type = "l") + geom_line() +
+  facet_grid(weekday_or_weekend ~ .)
+```
